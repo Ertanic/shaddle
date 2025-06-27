@@ -15,26 +15,21 @@ public class KdlParser
 
     private static Parser<char, Unit> ToUnit<T>(Parser<char, T> parser) => parser.Select(_ => Unit.Value);
 
-    internal static readonly Parser<char, Unit> Whitespace = ToUnit(OneOf(
-        Char('\u0009'),
-        Char('\u0020'),
-        Char('\u00A0'),
-        Char('\u1680'),
-        Char('\u2000'),
-        Char('\u2001'),
-        Char('\u2002'),
-        Char('\u2003'),
-        Char('\u2004'),
-        Char('\u2005'),
-        Char('\u2006'),
-        Char('\u2007'),
-        Char('\u2008'),
-        Char('\u2009'),
-        Char('\u200a'),
-        Char('\u202f'),
-        Char('\u205f'),
-        Char('\u3000')
-    ));
+    private static readonly List<char> _whitespaces = new()
+    {
+        '\u0009', '\u0020',
+        '\u00A0', '\u1680',
+        '\u2000', '\u2001',
+        '\u2002', '\u2003',
+        '\u2004', '\u2005',
+        '\u2006', '\u2007',
+        '\u2008', '\u2009',
+        '\u200a', '\u202f',
+        '\u205f', '\u3000'
+    };
+
+    internal static readonly Parser<char, Unit> Whitespace =
+        ToUnit(Token(c => _whitespaces.Contains(c))).Labelled("whitespace");
 
     internal static readonly Parser<char, Unit> Newline = ToUnit(OneOf(
         Try(String("\u000D\u000A")),
@@ -57,7 +52,7 @@ public class KdlParser
         ? c >= '0' && c < '0' + b
         : (c >= '0' && c <= '9') || (c >= 'A' && c < 'A' + b - 10) || (c >= 'a' && c < 'a' + b - 10));
 
-    internal static Parser<char, double> UnsignedDigits(ushort b) => Map(
+    private static Parser<char, double> UnsignedDigits(ushort b) => Map(
         (f, l) => (double)Convert.ToInt64((f + l).Replace("_", ""), b),
         DigitByBase(b),
         Char('_').Or(DigitByBase(b)).ManyString()
@@ -118,13 +113,78 @@ public class KdlParser
     );
 
     #endregion
-    
+
     #region Boolean
 
     internal static readonly Parser<char, KdlValue> Boolean = Char('#').Then(OneOf(
         String("true").ThenReturn(true),
         String("false").ThenReturn(false)
     )).Select(KdlValue (val) => new KdlBooleanValue(val));
+
+    #endregion
+
+    #region String
+
+    private static readonly List<char> NonidentifierCharacters = new()
+    {
+        '{', '}',
+        '(', ')',
+        '[', ']',
+        '/', '\\',
+        '"', '#',
+        ';', '='
+    };
+
+    private static readonly Parser<char, string> InitialCharacters = Letter.Select(c => c.ToString())
+        .Or(Token(c => c is '-' or '+').Then(OneOf(
+                    Token(c => c == '.').Then(Token(c => !char.IsDigit(c)).Labelled("not digit"),
+                        (f, l) => string.Concat(f, l)),
+                    Token(c => !char.IsDigit(c)).Labelled("not digit").Select(c => c.ToString())
+                ),
+                (f, l) => f + l
+            )
+        );
+
+    internal static readonly Parser<char, char> Escapes = Char('\\').Then(OneOf(
+        Char('\\').ThenReturn('\\'),
+        Char('"').ThenReturn('"'),
+        Char('n').ThenReturn('\n'),
+        Char('r').ThenReturn('\r'),
+        Char('t').ThenReturn('\t'),
+        Char('f').ThenReturn('\f'),
+        Char('b').ThenReturn('\b'),
+        Char('s').ThenReturn('\u0020'),
+        DigitByBase(16).AtLeastOnce().Between(String("u{"), Char('}'))
+            .Map(digits => (char)short.Parse(string.Concat(digits), NumberStyles.HexNumber))
+    ));
+
+    internal static readonly Parser<char, string> UnquotedString =
+        InitialCharacters.Then(
+            Token(c => !NonidentifierCharacters.Contains(c)).Until(OneOf(End, Newline, Whitespace)),
+            (f, l) => f + string.Concat(l)
+        );
+
+    internal static readonly Parser<char, Unit> EscapeWhitespace = Char('\\').Then(Whitespace.SkipAtLeastOnce());
+
+    internal static readonly Parser<char, string> QuotedString =
+        Char('"').Then(OneOf(
+            Try(EscapeWhitespace.Select(_ => "")),
+            Escapes.Select(c => c.ToString()),
+            Any.Select(c => c.ToString())
+        ).Until(Char('"'))).Select(string.Concat);
+
+    internal static readonly Parser<char, string> RawString = Char('#').AtLeastOnce().Select(hashes => hashes.Count())
+        .Then(count =>
+            Char('"').Then(
+                Any.Until(Try(String('"' + new string('#', count)))).Select(string.Concat)
+            )
+        );
+
+    internal static readonly Parser<char, KdlValue> String = OneOf(
+        UnquotedString,
+        QuotedString,
+        RawString
+    ).Select(KdlValue (s) => new KdlStringValue(s));
 
     #endregion
 }
