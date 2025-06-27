@@ -187,4 +187,10 @@ public class KdlParser
     ).Select(KdlValue (s) => new KdlStringValue(s));
 
     #endregion
+
+    #region Null
+
+    internal static readonly Parser<char, KdlValue> Null = String("#null").ThenReturn<KdlValue>(new KdlNullValue());
+
+    #endregion
 }
