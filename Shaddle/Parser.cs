@@ -118,4 +118,13 @@ public class KdlParser
     );
 
     #endregion
+    
+    #region Boolean
+
+    internal static readonly Parser<char, KdlValue> Boolean = Char('#').Then(OneOf(
+        String("true").ThenReturn(true),
+        String("false").ThenReturn(false)
+    )).Select(KdlValue (val) => new KdlBooleanValue(val));
+
+    #endregion
 }
