@@ -204,14 +204,14 @@ public class KdlParser
         Try(Keywords),
         Number,
         String
-    ).Labelled("node entry");
+    );
 
     internal static readonly Parser<char, KeyValuePair<string?, KdlValue>> NodeEntry = OneOf(
         Try(String.Then(
             Char('=').Then(Value),
             (key, val) => new KeyValuePair<string?, KdlValue>((key as KdlStringValue)?.Value, val)
-        )),
-        Value.Select(val => new KeyValuePair<string?, KdlValue>(null, val))
+        )).Labelled("node property"),
+        Value.Select(val => new KeyValuePair<string?, KdlValue>(null, val)).Labelled("node argument")
     );
 
     private static KdlNode MapKdlNode(string name,
@@ -242,15 +242,14 @@ public class KdlParser
     private static readonly Parser<char, Unit> NodeTerminator = ToUnit(Char(';')).Or(Newline).Or(End);
 
     private static readonly Parser<char, KdlDocument> NodeBody =
-        Char('{').Then(LineSpace.SkipMany().Then(Rec(() => Document!))).Before(LineSpace.SkipMany().Then(Char('}')));
+        Char('{').Then(LineSpace.SkipMany().Then(Rec(() => Document!))).Before(Char('}'));
 
     internal static readonly Parser<char, KdlNode> Node = Map(
         MapKdlNode,
         String.Select(s => (s as KdlStringValue)!.Value),
-        Whitespace.SkipMany().Then(NodeEntry.Separated(Whitespace.SkipMany())),
+        Whitespace.SkipMany().Then(NodeEntry.Separated(Whitespace.SkipAtLeastOnce())),
         Whitespace.SkipMany().Then(NodeBody).Optional()
     ).Before(NodeTerminator);
-
 
     internal static readonly Parser<char, KdlDocument> Document = Map(
         nodes => new KdlDocument(nodes.ToList()),
