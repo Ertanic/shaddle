@@ -192,7 +192,7 @@ public class Nodes
                     
                     components {
                       DoesTheThing
-                      AnotherThing /-property="value" /* comment 1
+                      OnemoreThing property="value" /* comment 1
                       */
                       
                       // or alternatively
@@ -220,7 +220,11 @@ public class Nodes
                     {
                         Children = new KdlDocument([
                             new KdlNode("DoesTheThing"),
-                            new KdlNode("AnotherThing"),
+                            new KdlNode("OnemoreThing")
+                            {
+                                Properties = new Dictionary<string, KdlValue>()
+                                    { { "property", new KdlStringValue("value") } }
+                            },
                             new KdlNode("AnotherThing")
                             {
                                 Children = new KdlDocument([
@@ -235,7 +239,7 @@ public class Nodes
                 ]),
             }
         ]);
-        
+
         var actual = KdlParser.Document.ParseOrThrow(val);
         Assert.Equivalent(expected, actual, true);
     }

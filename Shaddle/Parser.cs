@@ -237,9 +237,15 @@ public class KdlParser
         };
     }
 
-    private static readonly Parser<char, Unit> LineSpace = Whitespace.Or(Newline);
+    internal static readonly Parser<char, Unit> Comment = Char('/').Then(OneOf(
+        Char('/').Then(ToUnit(Any.ManyThen(Newline))),
+        Char('*').Then(ToUnit(Any.ManyThen(String("*/"))))
+    ));
 
-    private static readonly Parser<char, Unit> NodeTerminator = ToUnit(Char(';')).Or(Newline).Or(End);
+    private static readonly Parser<char, Unit> LineSpace = Comment.Or(Whitespace.Or(Newline));
+
+    private static readonly Parser<char, Unit> NodeTerminator =
+        ToUnit(Char(';')).Or(Newline).Or(Whitespace.SkipMany().Then(Comment)).Or(End);
 
     private static readonly Parser<char, KdlDocument> NodeBody =
         Char('{').Then(LineSpace.SkipMany().Then(Rec(() => Document!))).Before(Char('}'));
@@ -249,11 +255,11 @@ public class KdlParser
         String.Select(s => (s as KdlStringValue)!.Value),
         Try(Whitespace.SkipMany().Then(NodeEntry)).Many(),
         Whitespace.SkipMany().Then(NodeBody.Optional())
-    ).Before(NodeTerminator);
+    ).Before(NodeTerminator.Then(LineSpace.Many()));
 
     internal static readonly Parser<char, KdlDocument> Document = Map(
         nodes => new KdlDocument(nodes.ToList()),
-        LineSpace.SkipMany().Then(Node).Before(LineSpace.SkipMany()).Many()
+        LineSpace.SkipMany().Then(Node).Many()
     );
 
     #endregion
