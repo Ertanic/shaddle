@@ -204,19 +204,26 @@ public class KdlParser
     internal static readonly Parser<char, KdlNode> Node = Map(
         (node, entries, children) =>
         {
-            if (!entries.HasValue) return new KdlNode(node);
+            var arguments = new List<KdlValue>();
+            var properties = new Dictionary<string, KdlValue>();
 
-            var arguments = entries.Value.Where(e => e.Key is null).Select(e => e.Value).ToList();
-            var properties = entries.Value.Where(e => e.Key is not null)!.ToDictionary<string, KdlValue>();
+            foreach (var entry in entries)
+            {
+                if (entry.Key is null)
+                    arguments.Add(entry.Value);
+                else
+                    properties.Add(entry.Key, entry.Value);
+            }
+
             return new KdlNode(node)
             {
                 Arguments = arguments,
                 Properties = properties,
-                Children = children.HasValue ? children.Value : new KdlDocument([])
+                Children = children.HasValue ? children.Value : null
             };
         },
         String.Select(s => (s as KdlStringValue)!.Value),
-        Whitespace.SkipMany().Then(NodeEntry.Separated(Whitespace)).Optional(),
+        Whitespace.SkipMany().Then(NodeEntry.Separated(Whitespace)),
         Rec(() => Document!.Between(Char('{'), Char('}'))).Optional()
     );
 
@@ -227,11 +234,11 @@ public class KdlParser
                 Char(';').Select(_ => Unit.Value),
                 Newline.SkipAtLeastOnce()
             )
-            .Then(Whitespace.SkipMany()));
+            .Then(Whitespace.SkipMany())).Labelled("node separator");
 
     internal static readonly Parser<char, KdlDocument> Document = Space.SkipMany().Then(Map(
         nodes => new KdlDocument(nodes.ToList()),
-        Node.Separated(NodeSeparator)
+        Node.Then(NodeSeparator.SkipMany(), (n, _) => n).Many().Then(Space.SkipMany(), (n, _) => n)
     )).Before(Space.SkipMany());
 
     #endregion

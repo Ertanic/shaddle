@@ -12,5 +12,5 @@ public class KdlNode(string name, string? type = null)
 
     public IReadOnlyCollection<KdlValue> Arguments { get; init; } = new List<KdlValue>();
 
-    public KdlDocument? Children { get; init; } = new KdlDocument([]);
+    public KdlDocument? Children { get; init; }
 }

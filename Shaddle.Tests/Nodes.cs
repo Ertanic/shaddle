@@ -164,9 +164,19 @@ public class Nodes
     [Fact]
     public void Parse_NodeQuotedStringName()
     {
-        var val = "\"Node 1\" { \"Node 2\" }";
+        var val = "\"Node 1\" {\n \"Node 2\" \n}";
         List<KdlNode> nodes = [new KdlNode("Node 1") { Children = new KdlDocument([new KdlNode("Node 2")]) }];
         var expected = new KdlDocument(nodes);
+        
+        var actual = KdlParser.Document.ParseOrThrow(val);
+        Assert.Equivalent(expected, actual, true);
+    }
+
+    [Fact]
+    public void Parse_NodeWithoutChildren()
+    {
+        var val = "node1\n{\n\n}";
+        var expected = new KdlDocument([new KdlNode("node1")]);
         
         var actual = KdlParser.Document.ParseOrThrow(val);
         Assert.Equivalent(expected, actual, true);
