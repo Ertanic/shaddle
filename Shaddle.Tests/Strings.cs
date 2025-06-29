@@ -11,6 +11,7 @@ public class Strings
     [InlineData("+helloworld", "+helloworld")]
     [InlineData("+.helloworld", "+.helloworld")]
     [InlineData("hello world", "hello")]
+    [InlineData("hello=world", "hello")]
     public void Parse_UnquotedString(string s, string e)
     {
         var actual = KdlParser.UnquotedString.ParseOrThrow(s);
@@ -22,7 +23,6 @@ public class Strings
     [InlineData("+1HelloWorld")]
     [InlineData(".1HelloWorld")]
     [InlineData("+.1HelloWorld")]
-    [InlineData("Hello[World")]
     public void Parse_Nonidentifier_UnquotedString(string s)
     {
         Assert.ThrowsAny<ParseException>(() => KdlParser.UnquotedString.ParseOrThrow(s));

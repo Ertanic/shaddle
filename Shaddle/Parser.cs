@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using Pidgin;
 using Shaddle.Values;
@@ -32,12 +33,12 @@ public class KdlParser
         ToUnit(Token(c => _whitespaces.Contains(c))).Labelled("whitespace");
 
     internal static readonly Parser<char, Unit> Newline = ToUnit(OneOf(
-        Try(String("\u000D\u000A")),
-        String("\u000D"),
-        String("\u000A"),
+        Try(String("\r\n")),
+        String("\r"),
+        String("\n"),
         String("\u0085"),
-        String("\u000B"),
-        String("\u000C"),
+        String("\v"),
+        String("\f"),
         String("\u2028"),
         String("\u2029")
     ));
@@ -94,12 +95,6 @@ public class KdlParser
                 )
         );
 
-    internal static readonly Parser<char, double> NumberKeywords = Char('#').Then(OneOf(
-        String("-inf").ThenReturn(double.NegativeInfinity),
-        String("inf").ThenReturn(double.PositiveInfinity),
-        String("nan").ThenReturn(double.NaN)
-    ));
-
     internal static readonly Parser<char, KdlValue> Number = Map(
         KdlValue (sign, num) => new KdlNumberValue(sign.HasValue ? num * sign.Value : num),
         Sign.Optional(),
@@ -107,19 +102,9 @@ public class KdlParser
             Try(UnsignedHex),
             Try(UnsignedOctal),
             Try(UnsignedBinary),
-            UnsignedDouble,
-            NumberKeywords
+            UnsignedDouble
         )
     );
-
-    #endregion
-
-    #region Boolean
-
-    internal static readonly Parser<char, KdlValue> Boolean = Char('#').Then(OneOf(
-        String("true").ThenReturn(true),
-        String("false").ThenReturn(false)
-    )).Select(KdlValue (val) => new KdlBooleanValue(val));
 
     #endregion
 
@@ -127,12 +112,13 @@ public class KdlParser
 
     private static readonly List<char> NonidentifierCharacters = new()
     {
+        '\n', '=',
         '{', '}',
         '(', ')',
         '[', ']',
         '/', '\\',
         '"', '#',
-        ';', '='
+        ';'
     };
 
     private static readonly Parser<char, string> InitialCharacters = Letter.Select(c => c.ToString())
@@ -160,8 +146,8 @@ public class KdlParser
 
     internal static readonly Parser<char, string> UnquotedString =
         InitialCharacters.Then(
-            Token(c => !NonidentifierCharacters.Contains(c)).Until(OneOf(End, Newline, Whitespace)),
-            (f, l) => f + string.Concat(l)
+            Token(c => !NonidentifierCharacters.Contains(c) && !_whitespaces.Contains(c)).ManyString().TraceResult(),
+            (f, l) => f + l
         );
 
     internal static readonly Parser<char, Unit> EscapeWhitespace = Char('\\').Then(Whitespace.SkipAtLeastOnce());
@@ -188,9 +174,174 @@ public class KdlParser
 
     #endregion
 
-    #region Null
+    #region Keywords
 
-    internal static readonly Parser<char, KdlValue> Null = String("#null").ThenReturn<KdlValue>(new KdlNullValue());
+    internal static readonly Parser<char, KdlValue> Keywords = Char('#').Then(OneOf(
+        Try(String("null")).ThenReturn<KdlValue>(new KdlNullValue()),
+        String("true").ThenReturn<KdlValue>(new KdlBooleanValue(true)),
+        String("false").ThenReturn<KdlValue>(new KdlBooleanValue(false)),
+        String("-inf").ThenReturn<KdlValue>(new KdlNumberValue(double.NegativeInfinity)),
+        String("inf").ThenReturn<KdlValue>(new KdlNumberValue(double.PositiveInfinity)),
+        String("nan").ThenReturn<KdlValue>(new KdlNumberValue(double.NaN))
+    ));
 
     #endregion
+
+    #region Nodes
+
+    internal static readonly Parser<char, KdlValue> Value = OneOf(
+        Try(Keywords),
+        Number,
+        String
+    );
+
+    internal static readonly Parser<char, KeyValuePair<string?, KdlValue>> NodeEntry = OneOf(
+        Try(String.Then(Char('=').Then(Value),
+            (key, val) => new KeyValuePair<string?, KdlValue>((key as KdlStringValue)?.Value, val))),
+        Value.Select(val => new KeyValuePair<string?, KdlValue>(null, val))
+    );
+
+    internal static readonly Parser<char, KdlNode> Node = Map(
+        (node, entries, children) =>
+        {
+            if (!entries.HasValue) return new KdlNode(node);
+
+            var arguments = entries.Value.Where(e => e.Key is null).Select(e => e.Value).ToList();
+            var properties = entries.Value.Where(e => e.Key is not null)!.ToDictionary<string, KdlValue>();
+            return new KdlNode(node)
+            {
+                Arguments = arguments,
+                Properties = properties,
+                Children = children.HasValue ? children.Value : new KdlDocument([])
+            };
+        },
+        String.Select(s => (s as KdlStringValue)!.Value),
+        Whitespace.SkipMany().Then(NodeEntry.Separated(Whitespace)).Optional(),
+        Rec(() => Document!.Between(Char('{'), Char('}'))).Optional()
+    );
+
+    private static readonly Parser<char, Unit> Space = Whitespace.Or(Newline);
+
+    private static readonly Parser<char, Unit> NodeSeparator = Whitespace.SkipMany()
+        .Then(OneOf(
+                Char(';').Select(_ => Unit.Value),
+                Newline.SkipAtLeastOnce()
+            )
+            .Then(Whitespace.SkipMany()));
+
+    internal static readonly Parser<char, KdlDocument> Document = Space.SkipMany().Then(Map(
+        nodes => new KdlDocument(nodes.ToList()),
+        Node.Separated(NodeSeparator)
+    )).Before(Space.SkipMany());
+
+    #endregion
+
+    /// <summary>
+    /// Parses the input stream into a <see cref="KdlDocument"/>.
+    /// </summary>
+    /// <param name="reader">An input stream.</param>
+    /// <returns>Kdl document.</returns>
+    /// <exception cref="ParseException">In case of an error during parsing, it throws an exception.</exception>
+    public static KdlDocument Parse(TextReader reader) => Document.ParseOrThrow(reader);
+
+    /// <summary>
+    /// Tries to parse the input stream into a kdl document.
+    /// If parsing is successful, it returns <c>true</c> and <see cref="KdlDocument"/>.
+    /// In case of an error, it returns <c>false</c> and an error <see cref="ParseError{TToken}"/>.
+    /// </summary>
+    /// <param name="reader">An input stream.</param>
+    /// <param name="document">Kdl document.</param>
+    /// <param name="parseError">Parse error.</param>
+    /// <returns><c>true</c> or <c>false</c> depending on the success of the parsing.</returns>
+    public static bool TryParse(TextReader reader,
+        [NotNullWhen(true)] out KdlDocument? document,
+        [NotNullWhen(false)] out ParseError<char>? parseError)
+    {
+        var result = Document.Parse(reader);
+        if (result.Success)
+        {
+            document = result.Value;
+            parseError = null;
+            return true;
+        }
+
+        document = null;
+        parseError = result.Error!;
+        return false;
+    }
+
+    /// <summary>
+    /// The TryParse option, which is useful if you don't need error details.
+    /// </summary>
+    /// <param name="reader">An input stream.</param>
+    /// <param name="document">Kdl document.</param>
+    /// <returns><c>true</c> or <c>false</c> depending on the success of the parsing.</returns>
+    public static bool TryParse(TextReader reader, [NotNullWhen(true)] out KdlDocument? document)
+    {
+        if (TryParse(reader, out var doc, out var _))
+        {
+            document = doc;
+            return true;
+        }
+
+        document = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Parses the input string into a <see cref="KdlDocument"/>.
+    /// </summary>
+    /// <param name="input">An input string.</param>
+    /// <returns>Kdl document.</returns>
+    /// <exception cref="ParseException">In case of an error during parsing, it throws an exception.</exception>
+    public static KdlDocument Parse(string input)
+    {
+        using var reader = new StringReader(input);
+        return Parse(reader);
+    }
+
+    /// <summary>
+    /// Tries to parse the input string into a kdl document.
+    /// If parsing is successful, it returns <c>true</c> and <see cref="KdlDocument"/>.
+    /// In case of an error, it returns <c>false</c> and an error <see cref="ParseError{TToken}"/>.
+    /// </summary>
+    /// <param name="input">An input string.</param>
+    /// <param name="document">Kdl document.</param>
+    /// <param name="parseError">Parse error.</param>
+    /// <returns><c>true</c> or <c>false</c> depending on the success of the parsing.</returns>
+    public static bool TryParse(string input,
+        [NotNullWhen(true)] out KdlDocument? document,
+        [NotNullWhen(false)] out ParseError<char>? parseError)
+    {
+        using var reader = new StringReader(input);
+        if (TryParse(reader, out var doc, out var err))
+        {
+            document = doc;
+            parseError = null;
+            return true;
+        }
+
+        document = null;
+        parseError = err;
+        return false;
+    }
+
+    /// <summary>
+    /// The TryParse option, which is useful if you don't need error details.
+    /// </summary>
+    /// <param name="input">An input stream.</param>
+    /// <param name="document">Kdl document.</param>
+    /// <returns><c>true</c> or <c>false</c> depending on the success of the parsing.</returns>
+    public static bool TryParse(string input, [NotNullWhen(true)] out KdlDocument? document)
+    {
+        using var reader = new StringReader(input);
+        if (TryParse(reader, out var doc, out var _))
+        {
+            document = doc;
+            return true;
+        }
+
+        document = null;
+        return false;
+    }
 }

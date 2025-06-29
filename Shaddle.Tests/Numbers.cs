@@ -91,24 +91,12 @@ public class Numbers
     }
 
     [Theory]
-    [InlineData("#inf", double.PositiveInfinity)]
-    [InlineData("#-inf", double.NegativeInfinity)]
-    [InlineData("#nan", double.NaN)]
-    public void Parse_NumberKeywords(string s, double e)
-    {
-        var actual = KdlParser.NumberKeywords.ParseOrThrow(s);
-        Assert.Equal(e, actual);
-    }
-
-    [Theory]
     [InlineData("0", 0)]
     [InlineData("0.0", 0)]
     [InlineData("0o0", 0)]
     [InlineData("0b0001", 1)]
     [InlineData("0x0", 0)]
     [InlineData("1.42e+3", 1420)]
-    [InlineData("-#inf", -double.PositiveInfinity)]
-    [InlineData("+#-inf", +double.NegativeInfinity)]
     public void Parse_Number(string s, double e)
     {
         var actual = KdlParser.Number.ParseOrThrow(s) as KdlNumberValue;
