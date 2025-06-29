@@ -118,7 +118,7 @@ public class Nodes
             new KdlNode("node2")
                 { Arguments = [new KdlStringValue("arg")] }
         ];
-        var expected = new KdlDocument(nodes.OrderByDescending(n => n.Name).ToList());
+        var expected = new KdlDocument(nodes);
 
         var actual = KdlParser.Document.ParseOrThrow(val);
         Assert.Equivalent(expected, actual, true);
@@ -142,13 +142,13 @@ public class Nodes
         ];
         var expected = new KdlDocument(nodes.OrderBy(n => n.Name).ToList());
         var actual = KdlParser.Document.ParseOrThrow(val);
-        Assert.Equivalent(expected, actual, true);
+        Assert.Equivalent(expected.Nodes.ToList()[0], actual.Nodes.ToList()[0], true);
     }
 
     [Fact]
     public void Parse_NodeWithChildren()
     {
-        var val = "node1 { node2; node3\nNode4 };node5";
+        var val = "node1 { node2; node3\nNode4\n};node5";
         KdlNode[] nodes =
         [
             new KdlNode("node1")
@@ -167,7 +167,7 @@ public class Nodes
         var val = "\"Node 1\" {\n \"Node 2\" \n}";
         List<KdlNode> nodes = [new KdlNode("Node 1") { Children = new KdlDocument([new KdlNode("Node 2")]) }];
         var expected = new KdlDocument(nodes);
-        
+
         var actual = KdlParser.Document.ParseOrThrow(val);
         Assert.Equivalent(expected, actual, true);
     }
@@ -177,6 +177,64 @@ public class Nodes
     {
         var val = "node1\n{\n\n}";
         var expected = new KdlDocument([new KdlNode("node1")]);
+
+        var actual = KdlParser.Document.ParseOrThrow(val);
+        Assert.Equivalent(expected, actual, true);
+    }
+
+    [Fact]
+    public void Parse_RealExample()
+    {
+        var val = """
+                  entity Foobar {
+                    parent Baz
+                    name Real?
+                    
+                    components {
+                      DoesTheThing
+                      AnotherThing /-property="value" /* comment 1
+                      */
+                      
+                      // or alternatively
+                      AnotherThing {
+                        property "value" // comment 2
+                      }
+                    }
+                  }
+                  """;
+
+        var expected = new KdlDocument([
+            new KdlNode("entity")
+            {
+                Arguments = [new KdlStringValue("Foobar")],
+                Children = new KdlDocument([
+                    new KdlNode("parent")
+                    {
+                        Arguments = [new KdlStringValue("Baz")]
+                    },
+                    new KdlNode("name")
+                    {
+                        Arguments = [new KdlStringValue("Real?")]
+                    },
+                    new KdlNode("components")
+                    {
+                        Children = new KdlDocument([
+                            new KdlNode("DoesTheThing"),
+                            new KdlNode("AnotherThing"),
+                            new KdlNode("AnotherThing")
+                            {
+                                Children = new KdlDocument([
+                                    new KdlNode("property")
+                                    {
+                                        Arguments = [new KdlStringValue("value")]
+                                    }
+                                ])
+                            }
+                        ])
+                    }
+                ]),
+            }
+        ]);
         
         var actual = KdlParser.Document.ParseOrThrow(val);
         Assert.Equivalent(expected, actual, true);

@@ -29,6 +29,14 @@ public class KdlParser
         '\u205f', '\u3000'
     };
 
+    private static readonly List<string> _newlines = new()
+    {
+        "\r\n", "\r",
+        "\n", "\u0085",
+        "\v", "\f",
+        "\u2028", "\u2029",
+    };
+
     internal static readonly Parser<char, Unit> Whitespace =
         ToUnit(Token(c => _whitespaces.Contains(c))).Labelled("whitespace");
 
@@ -41,7 +49,7 @@ public class KdlParser
         String("\f"),
         String("\u2028"),
         String("\u2029")
-    ));
+    )).Labelled("newline");
 
     #endregion
 
@@ -146,7 +154,10 @@ public class KdlParser
 
     internal static readonly Parser<char, string> UnquotedString =
         InitialCharacters.Then(
-            Token(c => !NonidentifierCharacters.Contains(c) && !_whitespaces.Contains(c)).ManyString().TraceResult(),
+            Token(c =>
+                !NonidentifierCharacters.Contains(c)
+                && !_whitespaces.Contains(c)
+                && !_newlines.Contains(c.ToString())).ManyString(),
             (f, l) => f + l
         );
 
@@ -193,53 +204,110 @@ public class KdlParser
         Try(Keywords),
         Number,
         String
-    );
+    ).Labelled("node entry");
 
     internal static readonly Parser<char, KeyValuePair<string?, KdlValue>> NodeEntry = OneOf(
-        Try(String.Then(Char('=').Then(Value),
-            (key, val) => new KeyValuePair<string?, KdlValue>((key as KdlStringValue)?.Value, val))),
+        Try(String.Then(
+            Char('=').Then(Value),
+            (key, val) => new KeyValuePair<string?, KdlValue>((key as KdlStringValue)?.Value, val)
+        )),
         Value.Select(val => new KeyValuePair<string?, KdlValue>(null, val))
     );
 
-    internal static readonly Parser<char, KdlNode> Node = Map(
-        (node, entries, children) =>
+    private static KdlNode MapKdlNode(string name,
+        IEnumerable<KeyValuePair<string, KdlValue>> entries,
+        Maybe<KdlDocument> body)
+    {
+        var properties = new Dictionary<string, KdlValue>();
+        var arguments = new List<KdlValue>();
+
+        foreach (var entry in entries)
         {
-            var arguments = new List<KdlValue>();
-            var properties = new Dictionary<string, KdlValue>();
+            if (entry.Key is null)
+                arguments.Add(entry.Value);
+            else
+                properties.Add(entry.Key, entry.Value);
+        }
 
-            foreach (var entry in entries)
-            {
-                if (entry.Key is null)
-                    arguments.Add(entry.Value);
-                else
-                    properties.Add(entry.Key, entry.Value);
-            }
+        return new KdlNode(name)
+        {
+            Arguments = arguments,
+            Properties = properties,
+            Children = body.HasValue ? body.Value : null
+        };
+    }
 
-            return new KdlNode(node)
-            {
-                Arguments = arguments,
-                Properties = properties,
-                Children = children.HasValue ? children.Value : null
-            };
-        },
+    private static readonly Parser<char, Unit> LineSpace = Whitespace.Or(Newline);
+
+    private static readonly Parser<char, Unit> NodeTerminator = ToUnit(Char(';')).Or(Newline).Or(End);
+
+    private static readonly Parser<char, KdlDocument> NodeBody =
+        Char('{').Then(LineSpace.SkipMany().Then(Rec(() => Document!))).Before(LineSpace.SkipMany().Then(Char('}')));
+
+    internal static readonly Parser<char, KdlNode> Node = Map(
+        MapKdlNode,
         String.Select(s => (s as KdlStringValue)!.Value),
-        Whitespace.SkipMany().Then(NodeEntry.Separated(Whitespace)),
-        Rec(() => Document!.Between(Char('{'), Char('}'))).Optional()
+        Whitespace.SkipMany().Then(NodeEntry.Separated(Whitespace.SkipMany())),
+        Whitespace.SkipMany().Then(NodeBody).Optional()
+    ).Before(NodeTerminator);
+
+
+    internal static readonly Parser<char, KdlDocument> Document = Map(
+        nodes => new KdlDocument(nodes.ToList()),
+        LineSpace.SkipMany().Then(Node).Before(LineSpace.SkipMany()).Many()
     );
 
-    private static readonly Parser<char, Unit> Space = Whitespace.Or(Newline);
+    // internal static readonly Parser<char, Unit> Comment = Char('/').Then(OneOf(
+    //     Char('*').Then(Any.SkipUntil(Try(String("*/")))),
+    //     Char('/').Then(Any.SkipUntil(Newline.Or(End))),
+    //     Char('-').Then(OneOf(
+    //         Try(ToUnit(NodeEntry)),
+    //         ToUnit(Rec(() => Node))
+    //     ))
+    // ));
 
-    private static readonly Parser<char, Unit> NodeSeparator = Whitespace.SkipMany()
-        .Then(OneOf(
-                Char(';').Select(_ => Unit.Value),
-                Newline.SkipAtLeastOnce()
-            )
-            .Then(Whitespace.SkipMany())).Labelled("node separator");
-
-    internal static readonly Parser<char, KdlDocument> Document = Space.SkipMany().Then(Map(
-        nodes => new KdlDocument(nodes.ToList()),
-        Node.Then(NodeSeparator.SkipMany(), (n, _) => n).Many().Then(Space.SkipMany(), (n, _) => n)
-    )).Before(Space.SkipMany());
+    // private static readonly Parser<char, Unit> Space = Comment.Or(Whitespace).Or(Newline);
+    //
+    // internal static readonly Parser<char, KdlNode> Node = Map(
+    //     (node, entries, children, _) =>
+    //     {
+    //         var arguments = new List<KdlValue>();
+    //         var properties = new Dictionary<string, KdlValue>();
+    //
+    //         foreach (var entry in entries)
+    //         {
+    //             if (entry.Key is null)
+    //                 arguments.Add(entry.Value);
+    //             else
+    //                 properties.Add(entry.Key, entry.Value);
+    //         }
+    //
+    //         return new KdlNode(node)
+    //         {
+    //             Arguments = arguments,
+    //             Properties = properties,
+    //             Children = children.HasValue ? children.Value : null
+    //         };
+    //     },
+    //     String.Select(s => (s as KdlStringValue)!.Value),
+    //     Whitespace.SkipMany().Then(NodeEntry.Before(Whitespace.Optional()).Many()),
+    //     Rec(() => Document!.Before(
+    //         Char('{').Between(Space)
+    //     ).Then(Char('}'), (doc, _) => doc)).Optional(),
+    //     ToUnit(Char(';')).Or(Newline).Then(Space.SkipMany()).Or(End)
+    // );
+    //
+    // private static readonly Parser<char, Unit> NodeSeparator = Whitespace.SkipMany()
+    //     .Then(OneOf(
+    //             Char(';').Select(_ => Unit.Value),
+    //             Newline.SkipAtLeastOnce()
+    //         )
+    //         .Then(Space.SkipMany())).Labelled("node separator");
+    //
+    // internal static readonly Parser<char, KdlDocument> Document = Space.SkipMany().Then(Map(
+    //     nodes => new KdlDocument(nodes.ToList()),
+    //     Node.Before(Space.SkipMany()).Many()
+    // )).Before(Space.SkipMany());
 
     #endregion
 
