@@ -244,7 +244,7 @@ public class KdlParser
 
     private static readonly Parser<char, Unit> LineSpace = Comment.Or(Whitespace.Or(Newline));
 
-    private static readonly Parser<char, Unit> NodeSpace = ToUnit(String("/-").Then(NodeEntry)).Or(Whitespace);
+    private static readonly Parser<char, Unit> NodeSpace = Char('\\').Then(LineSpace.SkipAtLeastOnce()).Or(ToUnit(String("/-").Then(NodeEntry))).Or(Whitespace);
 
     private static readonly Parser<char, Unit> DocumentSpace =
         Try(ToUnit(String("/-").Then(Rec(() => Node!)))).Or(LineSpace);
@@ -254,7 +254,7 @@ public class KdlParser
 
     private static readonly Parser<char, KdlDocument> NodeBody =
         Char('{').Then(LineSpace.SkipMany().Then(Rec(() => Document!))).Before(Char('}'));
-    
+
     private static readonly Parser<char, Unit> ChildrenSpace = ToUnit(String("/-").Then(NodeBody)).Or(Whitespace);
 
     internal static readonly Parser<char, KdlNode> Node = Map(

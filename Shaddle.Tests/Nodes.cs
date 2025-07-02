@@ -316,4 +316,38 @@ public class Nodes
         var actual = KdlParser.Document.ParseOrThrow(val);
         Assert.Equivalent(expected, actual, true);
     }
+
+    [Fact]
+    public void Parse_EscapeWhitespace()
+    {
+        var val = "node1 hello \\\n       world";
+        var expected = new KdlDocument([new KdlNode("node1") { Arguments = [new KdlStringValue("hello"), new KdlStringValue("world")] }]);
+
+        var actual = KdlParser.Parse(val);
+        Assert.Equivalent(expected, actual, true);
+    }
+
+    [Fact]
+    public void Parse_EscapeWhitespace_MultipleNodes()
+    {
+        var val = """
+                  node1 {
+                    node2 hello world \
+                          from  \
+                          node2
+                    node3
+                  }
+                  """;
+        var expected = new KdlDocument([new KdlNode("node1") {
+            Children = new KdlDocument([new KdlNode("node2") {
+                Arguments = [
+                    new KdlStringValue("hello"), new KdlStringValue("world"),
+                    new KdlStringValue("from"), new KdlStringValue("node2")
+                ]
+            }, new KdlNode("node3")])
+        }]);
+
+        var actual = KdlParser.Parse(val);
+        Assert.Equivalent(expected.Nodes.ToList()[0], actual.Nodes.ToList()[0], true);
+    }
 }
