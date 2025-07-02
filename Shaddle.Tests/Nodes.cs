@@ -321,7 +321,9 @@ public class Nodes
     public void Parse_EscapeWhitespace()
     {
         var val = "node1 hello \\\n       world";
-        var expected = new KdlDocument([new KdlNode("node1") { Arguments = [new KdlStringValue("hello"), new KdlStringValue("world")] }]);
+        var expected = new KdlDocument([
+            new KdlNode("node1") { Arguments = [new KdlStringValue("hello"), new KdlStringValue("world")] }
+        ]);
 
         var actual = KdlParser.Parse(val);
         Assert.Equivalent(expected, actual, true);
@@ -338,16 +340,57 @@ public class Nodes
                     node3
                   }
                   """;
-        var expected = new KdlDocument([new KdlNode("node1") {
-            Children = new KdlDocument([new KdlNode("node2") {
-                Arguments = [
-                    new KdlStringValue("hello"), new KdlStringValue("world"),
-                    new KdlStringValue("from"), new KdlStringValue("node2")
-                ]
-            }, new KdlNode("node3")])
-        }]);
+        var expected = new KdlDocument([
+            new KdlNode("node1")
+            {
+                Children = new KdlDocument([
+                    new KdlNode("node2")
+                    {
+                        Arguments =
+                        [
+                            new KdlStringValue("hello"), new KdlStringValue("world"),
+                            new KdlStringValue("from"), new KdlStringValue("node2")
+                        ]
+                    },
+                    new KdlNode("node3")
+                ])
+            }
+        ]);
 
         var actual = KdlParser.Parse(val);
         Assert.Equivalent(expected.Nodes.ToList()[0], actual.Nodes.ToList()[0], true);
+    }
+
+    [Fact]
+    public void Parse_TypedNode()
+    {
+        var val = "(typed-node)node1";
+        var expected = new KdlDocument([new KdlNode("node1", "typed-node")]);
+
+        var actual = KdlParser.Parse(val);
+        Assert.Equivalent(expected, actual, true);
+    }
+
+    [Fact]
+    public void Parse_TypedNode_MultipleNodes()
+    {
+        var val = """
+                  node1 { 
+                    (typed-node)node2 
+                    (foobar)node3 
+                  }
+                  """;
+        var expected = new KdlDocument([
+            new KdlNode("node1")
+            {
+                Children = new KdlDocument([
+                    new KdlNode("node2", "typed-node"),
+                    new KdlNode("node3", "foobar")
+                ])
+            }
+        ]);
+
+        var actual = KdlParser.Parse(val);
+        Assert.Equivalent(expected, actual, true);
     }
 }

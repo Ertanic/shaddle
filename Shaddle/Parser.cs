@@ -214,7 +214,8 @@ public class KdlParser
         Value.Select(val => new KeyValuePair<string?, KdlValue>(null, val)).Labelled("node argument")
     );
 
-    private static KdlNode MapKdlNode(string name,
+    private static KdlNode MapKdlNode(Maybe<string> type,
+        string name,
         IEnumerable<KeyValuePair<string?, KdlValue>> entries,
         Maybe<KdlDocument> body)
     {
@@ -229,7 +230,7 @@ public class KdlParser
                 properties.Add(entry.Key, entry.Value);
         }
 
-        return new KdlNode(name)
+        return new KdlNode(name, type.HasValue ? type.Value : null)
         {
             Arguments = arguments,
             Properties = properties,
@@ -240,17 +241,21 @@ public class KdlParser
     internal static readonly Parser<char, Unit> Comment = Char('/').Then(OneOf(
         Char('/').Then(ToUnit(Any.ManyThen(Newline))),
         Char('*').Then(ToUnit(Any.ManyThen(String("*/"))))
-    ));
+    )).Labelled("comment");
 
     private static readonly Parser<char, Unit> LineSpace = Comment.Or(Whitespace.Or(Newline));
 
-    private static readonly Parser<char, Unit> NodeSpace = Char('\\').Then(LineSpace.SkipAtLeastOnce()).Or(ToUnit(String("/-").Then(NodeEntry))).Or(Whitespace);
+    private static readonly Parser<char, Unit> NodeSpace = Char('\\').Then(LineSpace.SkipAtLeastOnce())
+        .Or(ToUnit(String("/-").Then(NodeEntry))).Or(Whitespace);
 
     private static readonly Parser<char, Unit> DocumentSpace =
         Try(ToUnit(String("/-").Then(Rec(() => Node!)))).Or(LineSpace);
 
     private static readonly Parser<char, Unit> NodeTerminator =
-        ToUnit(Char(';')).Or(Newline).Or(Whitespace.SkipMany().Then(Comment)).Or(End);
+        ToUnit(Char(';'))
+            .Or(Newline)
+            .Or(Whitespace.SkipMany().Then(Comment))
+            .Or(End);
 
     private static readonly Parser<char, KdlDocument> NodeBody =
         Char('{').Then(LineSpace.SkipMany().Then(Rec(() => Document!))).Before(Char('}'));
@@ -259,6 +264,7 @@ public class KdlParser
 
     internal static readonly Parser<char, KdlNode> Node = Map(
         MapKdlNode,
+        UnquotedString.Between(Char('('), Char(')')).Optional(),
         String.Select(s => (s as KdlStringValue)!.Value),
         Try(NodeSpace.SkipMany().Then(NodeEntry)).Many(),
         Try(NodeSpace).SkipMany().Then(NodeBody.Optional())
