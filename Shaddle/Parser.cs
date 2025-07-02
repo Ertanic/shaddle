@@ -215,7 +215,7 @@ public class KdlParser
     );
 
     private static KdlNode MapKdlNode(string name,
-        IEnumerable<KeyValuePair<string, KdlValue>> entries,
+        IEnumerable<KeyValuePair<string?, KdlValue>> entries,
         Maybe<KdlDocument> body)
     {
         var properties = new Dictionary<string, KdlValue>();
@@ -244,22 +244,29 @@ public class KdlParser
 
     private static readonly Parser<char, Unit> LineSpace = Comment.Or(Whitespace.Or(Newline));
 
+    private static readonly Parser<char, Unit> NodeSpace = ToUnit(String("/-").Then(NodeEntry)).Or(Whitespace);
+
+    private static readonly Parser<char, Unit> DocumentSpace =
+        Try(ToUnit(String("/-").Then(Rec(() => Node!)))).Or(LineSpace);
+
     private static readonly Parser<char, Unit> NodeTerminator =
         ToUnit(Char(';')).Or(Newline).Or(Whitespace.SkipMany().Then(Comment)).Or(End);
 
     private static readonly Parser<char, KdlDocument> NodeBody =
         Char('{').Then(LineSpace.SkipMany().Then(Rec(() => Document!))).Before(Char('}'));
+    
+    private static readonly Parser<char, Unit> ChildrenSpace = ToUnit(String("/-").Then(NodeBody)).Or(Whitespace);
 
     internal static readonly Parser<char, KdlNode> Node = Map(
         MapKdlNode,
         String.Select(s => (s as KdlStringValue)!.Value),
-        Try(Whitespace.SkipMany().Then(NodeEntry)).Many(),
-        Whitespace.SkipMany().Then(NodeBody.Optional())
-    ).Before(NodeTerminator.Then(LineSpace.Many()));
+        Try(NodeSpace.SkipMany().Then(NodeEntry)).Many(),
+        Try(NodeSpace).SkipMany().Then(NodeBody.Optional())
+    ).Before(Try(ChildrenSpace).Many().Then(NodeTerminator));
 
     internal static readonly Parser<char, KdlDocument> Document = Map(
         nodes => new KdlDocument(nodes.ToList()),
-        LineSpace.SkipMany().Then(Node).Many()
+        DocumentSpace.SkipMany().Then(Node).Before(DocumentSpace.Many()).Many()
     );
 
     #endregion

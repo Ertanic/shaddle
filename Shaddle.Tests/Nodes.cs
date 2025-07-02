@@ -243,4 +243,77 @@ public class Nodes
         var actual = KdlParser.Document.ParseOrThrow(val);
         Assert.Equivalent(expected, actual, true);
     }
+
+    [Fact]
+    public void Parse_SlashdashComment_NodeLevel()
+    {
+        var val = """
+                  node1 {
+                    node2 foo
+                    /-node3 hello=world
+                    node4 bar
+                  }
+                  """;
+        var expected = new KdlDocument(
+        [
+            new KdlNode("node1")
+            {
+                Children = new KdlDocument([
+                    new KdlNode("node2")
+                    {
+                        Arguments = [new KdlStringValue("foo")]
+                    },
+                    new KdlNode("node4")
+                    {
+                        Arguments = [new KdlStringValue("bar")]
+                    }
+                ])
+            }
+        ]);
+
+        var actual = KdlParser.Document.ParseOrThrow(val);
+        Assert.Equivalent(expected, actual, true);
+    }
+
+    [Fact]
+    public void Parse_SlashdashComment_EntryLevel()
+    {
+        var val = """
+                  node1 {
+                    node2 /-hello=world
+                    node3 foo
+                  }
+                  """;
+        var expected = new KdlDocument(
+        [
+            new KdlNode("node1")
+            {
+                Children = new KdlDocument([
+                    new KdlNode("node2"),
+                    new KdlNode("node3")
+                    {
+                        Arguments = [new KdlStringValue("foo")]
+                    }
+                ])
+            }
+        ]);
+
+        var actual = KdlParser.Document.ParseOrThrow(val);
+        Assert.Equivalent(expected, actual, true);
+    }
+
+    [Fact]
+    public void Parse_SlashdashComment_ChildrenLevel()
+    {
+        var val = """
+                  node1 /-{
+                    node2
+                    node3 foo
+                  }
+                  """;
+        var expected = new KdlDocument([new KdlNode("node1")]);
+
+        var actual = KdlParser.Document.ParseOrThrow(val);
+        Assert.Equivalent(expected, actual, true);
+    }
 }
