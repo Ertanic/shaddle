@@ -393,4 +393,25 @@ public class Nodes
         var actual = KdlParser.Parse(val);
         Assert.Equivalent(expected, actual, true);
     }
+
+    [Fact]
+    public void Parse_TypedString()
+    {
+        var val = """
+                  node (regex)".*" hello=(name)"world"
+                  """;
+        var expected = new KdlDocument([
+            new KdlNode("node")
+            {
+                Arguments = [new KdlValue<string>(".*", "regex")],
+                Properties = new Dictionary<string, KdlValue>()
+                {
+                    { "hello", new KdlValue<string>("world", "name") }
+                }
+            }
+        ]);
+
+        var actual = KdlParser.Parse(val);
+        Assert.Equivalent(expected, actual, true);
+    }
 }

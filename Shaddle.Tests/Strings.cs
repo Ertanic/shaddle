@@ -82,7 +82,7 @@ public class Strings
     [InlineData("#\"\"Hello, World!\"\"#", "\"Hello, World!\"")]
     public void Parse_String(string s, string e)
     {
-        var actual = KdlParser.String.ParseOrThrow(s) as KdlStringValue;
-        Assert.Equal(e, actual?.Value);
+        var actual = KdlParser.String.ParseOrThrow(s);
+        Assert.Equal(e, actual);
     }
 }

@@ -177,11 +177,18 @@ public class KdlParser
             )
         );
 
-    internal static readonly Parser<char, KdlValue> String = OneOf(
+    internal static readonly Parser<char, string> String = OneOf(
         UnquotedString,
         QuotedString,
         RawString
-    ).Select(KdlValue (s) => new KdlStringValue(s));
+    );
+
+    private static readonly Parser<char, KdlValue> TypedString =
+        UnquotedString.Between(Char('('), Char(')')).Optional()
+            .Then<string, KdlValue>(String,
+                (type, str) => type.HasValue
+                    ? new KdlValue<string>(str, type.Value)
+                    : new KdlStringValue(str));
 
     #endregion
 
@@ -203,13 +210,13 @@ public class KdlParser
     internal static readonly Parser<char, KdlValue> Value = OneOf(
         Try(Keywords),
         Number,
-        String
+        TypedString
     );
 
     internal static readonly Parser<char, KeyValuePair<string?, KdlValue>> NodeEntry = OneOf(
         Try(String.Then(
             Char('=').Then(Value),
-            (key, val) => new KeyValuePair<string?, KdlValue>((key as KdlStringValue)?.Value, val)
+            (key, val) => new KeyValuePair<string?, KdlValue>(key, val)
         )).Labelled("node property"),
         Value.Select(val => new KeyValuePair<string?, KdlValue>(null, val)).Labelled("node argument")
     );
@@ -265,7 +272,7 @@ public class KdlParser
     internal static readonly Parser<char, KdlNode> Node = Map(
         MapKdlNode,
         UnquotedString.Between(Char('('), Char(')')).Optional(),
-        String.Select(s => (s as KdlStringValue)!.Value),
+        String,
         Try(NodeSpace.SkipMany().Then(NodeEntry)).Many(),
         Try(NodeSpace).SkipMany().Then(NodeBody.Optional())
     ).Before(Try(ChildrenSpace).Many().Then(NodeTerminator));
