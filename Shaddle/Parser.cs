@@ -285,6 +285,8 @@ public class KdlParser
 
     #endregion
 
+    #region Methods
+
     /// <summary>
     /// Parses the input stream into a <see cref="KdlDocument"/>.
     /// </summary>
@@ -393,4 +395,6 @@ public class KdlParser
         document = null;
         return false;
     }
+
+    #endregion
 }
