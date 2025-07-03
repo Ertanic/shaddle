@@ -79,7 +79,7 @@ public class KdlParser
                 ? "-" + digits
                 : "+" + digits)
             : digits),
-        ((e, digits) => e + digits.Replace("_", ""))
+        (e, digits) => e + digits.Replace("_", "")
     );
 
     internal static readonly Parser<char, double> UnsignedDouble = DigitByBase(10)
@@ -183,9 +183,10 @@ public class KdlParser
         RawString
     );
 
+    private static readonly Parser<char, Maybe<string>> Type = UnquotedString.Between(Char('('), Char(')')).Optional();
+
     private static readonly Parser<char, KdlValue> TypedString =
-        UnquotedString.Between(Char('('), Char(')')).Optional()
-            .Then<string, KdlValue>(String,
+        Type.Then<string, KdlValue>(String,
                 (type, str) => type.HasValue
                     ? new KdlValue<string>(str, type.Value)
                     : new KdlStringValue(str));
@@ -271,7 +272,7 @@ public class KdlParser
 
     internal static readonly Parser<char, KdlNode> Node = Map(
         MapKdlNode,
-        UnquotedString.Between(Char('('), Char(')')).Optional(),
+        Type,
         String,
         Try(NodeSpace.SkipMany().Then(NodeEntry)).Many(),
         Try(NodeSpace).SkipMany().Then(NodeBody.Optional())
