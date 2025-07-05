@@ -2,6 +2,11 @@
 
     <PropertyGroup>
         <TargetFramework>net9.0</TargetFramework>
+        <PackageId>Shaddle</PackageId>
+        <Version>1.0.0</Version>
+        <Authors>Ertanic</Authors>
+        <Description>small KDL parser</Description>
+        <RepositoryUrl>https://github.com/Ertanic/shaddle</RepositoryUrl>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
