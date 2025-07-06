@@ -62,4 +62,25 @@ public class Serialize
 
         Assert.Equal(val, expected);
     }
+
+    [Fact]
+    public void SerializeRoundtripCompact()
+    {
+        var val = """
+                  node1 {
+                    node2 hello=world 2333
+                  }
+                  node3 #null optional=#true {
+                    node4 1 2 \
+                          3 4
+                  }
+                  """;
+
+        var parsed = KdlParser.Parse(val);
+        var serialized = KdlSerializer.SerializeCompact(parsed);
+
+        var expected = @"""node1""{""node2"" hello=""world"" 2333};""node3"" optional=#true #null{""node4"" 1 2 3 4}";
+        
+        Assert.Equal(serialized, expected);
+    }
 }
