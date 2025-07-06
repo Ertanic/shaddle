@@ -16,13 +16,7 @@ public sealed class KdlNode(string name, string? type = null) : ISerializable
     public IReadOnlyCollection<KdlValue> Arguments { get; init; } = new List<KdlValue>();
 
     public KdlDocument? Children { get; init; }
-
-
-    public void BuildKdlPrettyString(StringBuilder builder)
-    {
-        throw new NotImplementedException();
-    }
-
+    
     public void BuildKdlString(StringBuilder builder)
     {
         if (Type is not null)

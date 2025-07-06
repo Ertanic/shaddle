@@ -6,12 +6,7 @@ namespace Shaddle;
 public sealed class KdlDocument(IReadOnlyCollection<KdlNode> nodes) : ISerializable
 {
     public IReadOnlyCollection<KdlNode> Nodes { get; } = nodes;
-
-    public void BuildKdlPrettyString(StringBuilder builder)
-    {
-        throw new NotImplementedException();
-    }
-
+    
     public void BuildKdlString(StringBuilder builder)
     {
         var nodes = Nodes.ToList();

@@ -12,16 +12,6 @@ public class KdlValue<TValue>(TValue value, string? type) : KdlValue(type), ISer
 {
     public TValue Value { get; } = value;
 
-    public void BuildKdlPrettyString(StringBuilder builder)
-    {
-        if (Type is not null)
-        {
-            builder.Append($"({Type})");
-        }
-
-        builder.Append($"\"{Value}\"");
-    }
-
     public void BuildKdlString(StringBuilder builder)
     {
         if (Type is not null)
